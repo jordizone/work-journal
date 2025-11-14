@@ -23,7 +23,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "icon",
-    href: "https://emojicdn.elk.sh/🎱",
+    href: "https://emojicdn.elk.sh/🛵",
   },
 ]
 
@@ -37,7 +37,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <main className="m-auto mt-20 mb-20 flex max-w-sm flex-col">
+          <div className="w-full">
+            <h1 className="text-3xl font-bold">Work Journal</h1>
+            <p className="text-gray-500">Learning and doing. Updated weekly</p>
+          </div>
+          {children}
+        </main>
         <ScrollRestoration />
         <Scripts />
       </body>

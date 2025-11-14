@@ -1,6 +1,8 @@
-import { Form, redirect } from "react-router"
-import type { Route } from "./+types/home"
+import { format, parseISO, startOfWeek } from "date-fns"
 import { PrismaClient } from "generated/prisma/client"
+import { Link, useLoaderData } from "react-router"
+import { EntryForm } from "~/components/entry-form"
+import type { Route } from "./+types/home"
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -16,6 +18,13 @@ export async function action({ request }: Route.ActionArgs) {
   console.log("Form data:", data)
   let { date, category, content } = data
 
+  // Simulate a delay
+  await new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(true)
+    }, 1000)
+  })
+
   if (
     typeof date !== "string" ||
     typeof category !== "string" ||
@@ -25,97 +34,127 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // Here you would typically save the data to a database
-  await db.entry.create({
+  return await db.entry.create({
     data: {
       date: new Date(date),
       category,
       content,
     },
   })
+}
 
-  return redirect("/")
+export async function loader({}: Route.LoaderArgs) {
+  let db = new PrismaClient()
+  let entries = await db.entry.findMany({
+    orderBy: { date: "desc" },
+  })
+  return entries.map((entry) => ({
+    ...entry,
+    date: entry.date.toISOString().substring(0, 10),
+  }))
 }
 
 export default function Home() {
+  let entries = useLoaderData<typeof loader>()
+
+  let entriesByWeek = entries.reduce<Record<string, typeof entries>>(
+    (memo, entry) => {
+      let sunday = startOfWeek(parseISO(entry.date))
+      let sundayString = format(sunday, "yyyy-MM-dd")
+      memo[sundayString] ||= []
+      memo[sundayString].push(entry)
+      return memo
+    },
+    {} as Record<string, typeof entries>
+  )
+
+  let weeks = Object.keys(entriesByWeek)
+    .sort((a, b) => a.localeCompare(b))
+    .map((dateString) => ({
+      dateString,
+      work: entriesByWeek[dateString].filter(
+        (entry) => entry.category === "work"
+      ),
+      learning: entriesByWeek[dateString].filter(
+        (entry) => entry.category === "learning"
+      ),
+      interesting: entriesByWeek[dateString].filter(
+        (entry) => entry.category === "interesting-thing"
+      ),
+    }))
+
   return (
-    <main className="m-auto mt-20 flex max-w-sm flex-col">
-      <div className="w-full">
-        <h1 className="text-3xl font-bold">Work Journal</h1>
-        <p className="text-gray-500">Learning and doing. Updated weekly</p>
-      </div>
-      <div className="mt-10 w-full rounded-md border-2 border-dashed border-gray-200 p-2">
-        <Form method="post">
-          <p className="font-medium italic">Create an entry</p>
-          {/* date */}
-          <div className="mt-2 w-fit">
-            <input className="rounded-md" type="date" name="date" id="date" />
+    <div>
+      <EntryForm />
+
+      {entries.length === 0 ? (
+        <div className="mt-10">
+          <p>No entries! Write your first journal entry.</p>
+        </div>
+      ) : (
+        <div className="mt-10 w-full">
+          <div className="mt-4 space-y-10">
+            {weeks.map((week) => (
+              <div key={week.dateString} className="bpt-4">
+                <h3 className="text-xl font-semibold">
+                  Week of {format(parseISO(week.dateString), "MMMM do")}
+                </h3>
+                {/* Work Entries */}
+                {week.work.length > 0 && (
+                  <div className="mt-2">
+                    <h4 className="font-medium">👨‍💻 Work</h4>
+                    <ul className="ml-4 list-inside list-disc">
+                      {week.work.map((entry) => (
+                        <EntryListItem key={entry.id} entry={entry} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* Learning Entries */}
+                {week.learning.length > 0 && (
+                  <div className="mt-2">
+                    <h4 className="font-medium">🧠 Learning</h4>
+                    <ul className="ml-4 list-inside list-disc">
+                      {week.learning.map((entry) => (
+                        <EntryListItem key={entry.id} entry={entry} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {/* Interesting Thing Entries */}
+                {week.interesting.length > 0 && (
+                  <div className="mt-2">
+                    <h4 className="font-medium">✨ Interesting Things</h4>
+                    <ul className="ml-4 list-inside list-disc">
+                      {week.interesting.map((entry) => (
+                        <EntryListItem key={entry.id} entry={entry} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-          {/* category */}
-          <div className="mt-2 flex gap-3">
-            <label
-              className="flex items-center hover:cursor-pointer"
-              htmlFor="work"
-            >
-              <input
-                type="radio"
-                className="mr-2"
-                name="category"
-                value="work"
-                id="work"
-              />
-              Work
-            </label>
-            <label
-              className="flex items-center hover:cursor-pointer"
-              htmlFor="learning"
-            >
-              <input
-                type="radio"
-                className="mr-2"
-                name="category"
-                value="learning"
-                id="learning"
-              />
-              Learning
-            </label>
-            <label
-              className="flex items-center hover:cursor-pointer"
-              htmlFor="interesting-thing"
-            >
-              <input
-                type="radio"
-                className="mr-2"
-                name="category"
-                value="interesting-thing"
-                id="interesting-thing"
-              />
-              Interesting
-            </label>
-          </div>
-          {/* content */}
-          <div className="mt-2">
-            <textarea
-              className="w-full rounded-md border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500"
-              name="content"
-              id="content"
-              rows={4}
-              placeholder="Write your journal entry here..."
-            ></textarea>
-          </div>
-          {/* submit button */}
-          <div className="mt-2 w-full text-right">
-            <button
-              type="submit"
-              className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors focus-within:ring-2 focus-within:ring-blue-700 focus-within:ring-offset-2 focus-within:outline-none hover:cursor-pointer hover:bg-blue-400"
-            >
-              Add Entry
-            </button>
-          </div>
-        </Form>
-      </div>
-      <div className="mt-10">
-        <p>No entries! Write your first journal entry.</p>
-      </div>
-    </main>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EntryListItem({
+  entry,
+}: {
+  entry: Awaited<ReturnType<typeof loader>>[number]
+}) {
+  return (
+    <li className="group mt-1">
+      {entry.content}
+      <Link
+        to={`/entries/${entry.id}/edit`}
+        className="ml-2 text-sm text-blue-600 underline opacity-0 transition-opacity group-hover:opacity-100 hover:cursor-pointer"
+      >
+        Edit
+      </Link>
+    </li>
   )
 }
